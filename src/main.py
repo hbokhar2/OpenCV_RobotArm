@@ -3,7 +3,7 @@ import cv2
 
 cap = cv2.VideoCapture(0)
 
-threshold = 50
+threshold = 30
 
 while (1):
     _,frame = cap.read()
@@ -20,14 +20,14 @@ while (1):
     red_only[red_only >= threshold] = 255 # sets #'s greater than 255 down to 255
 
 
-    cv2.imshow('RO-RGB',frame)
-    cv2.imshow('RO-Red',red)
+    cv2.imshow('Bokhari-RGB',frame)
+    cv2.imshow('Bokhari-Red',red)
     #cv2.imshow('RO-Green',green)
     #cv2.imshow('RO-Blue',blue)
 
     red_only = np.uint8(red_only)
 
-    cv2.imshow('RO-Red Only', red_only)
+    cv2.imshow('Bokhari-Red Only', red_only)
 
     k = cv2.waitKey(5) # number is ms delay to check if
     # the number 27 is the ASCII control character value for the esc key
@@ -54,7 +54,6 @@ red_row_location = row_total / total_total
 print('Red row ("Y") location: ', red_row_location)
 
 red_only = np.uint8(red_only) # ensure red_only is a unsigned interger
-
 
 cv2.destroyAllWindows() #closes openned python windows
  
