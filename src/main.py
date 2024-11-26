@@ -44,3 +44,21 @@ while True:
 
 cap.release()
 cv.destroyAllWindows()
+
+#finding the center of the object for x coordinate
+#column_sums = np.matrix(np.sum(red_only, 0)) # 0 sums the columns
+#column_numbers = np.matrix(np.arange(640))
+#column_mult = np.multiply(column_sums, column_numbers) #element wise multiplication
+#column_total = np.sum(column_mult)
+#total_total = np.sum(np.sum(red_only)) #sums all values in the image
+#red_column_location = column_total/total_total
+#print('Red column ("X") location: ', red_column_location)
+
+#finding the center of the object for Y coordinate
+#row_sums = np.matrix(np.sum(red_only, 1))
+#row_sums = row_sums.transpose()
+#row_numbers = np.matrix(np.arange(480))
+#row_mult = np.multiply(row_sums, row_numbers)
+#row_total = np.sum(row_mult)
+#red_row_location = row_total / total_total
+#print('Red row ("Y") location: ', red_row_location)
