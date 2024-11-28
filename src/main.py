@@ -2,7 +2,9 @@ import cv2 as cv
 import numpy as np
 import os
 
-cap = cv.VideoCapture(0)
+cap = cv.VideoCapture(1)
+
+cm_to_pixel = 21.6/640
 
 while True:
     ret, frame = cap.read()

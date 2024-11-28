@@ -1,63 +1,56 @@
 import numpy as np
-import cv2 as cv
+import cv2
 
-cap = cv.VideoCapture(0)
+cap = cv2.VideoCapture(1)
+font = cv2.FONT_HERSHEY_SIMPLEX  # Font for overlay text
 
-while(1):
-    _,frame = cap.read()
+# Define HSV ranges for red, green, and blue
+lower_red_1 = np.array([0, 50, 50])   # First range for red (hue ~ 0-10)
+upper_red_1 = np.array([10, 255, 255])
+lower_red_2 = np.array([170, 50, 50]) # Second range for red (hue ~ 170-180)
+upper_red_2 = np.array([180, 255, 255])
 
-    gray_image = cv.cvtColor(frame,cv.COLOR_BGR2GRAY)
-    cv.imshow('background', gray_image)
-    k = cv.waitKey(5)
-    if k == 27:
+lower_green = np.array([35, 50, 50])  # Range for green (hue ~ 35-85)
+upper_green = np.array([85, 255, 255])
+
+lower_blue = np.array([100, 50, 50])  # Range for blue (hue ~ 100-140)
+upper_blue = np.array([140, 255, 255])
+
+while True:
+    _, frame = cap.read()
+
+    # Convert frame to HSV color space
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # Isolate red shades
+    mask_red_1 = cv2.inRange(hsv, lower_red_1, upper_red_1)
+    mask_red_2 = cv2.inRange(hsv, lower_red_2, upper_red_2)
+    red_only = cv2.bitwise_or(mask_red_1, mask_red_2)
+
+    # Isolate green shades
+    green_only = cv2.inRange(hsv, lower_green, upper_green)
+
+    # Isolate blue shades
+    blue_only = cv2.inRange(hsv, lower_blue, upper_blue)
+
+    # Add text to the main frame
+    cv2.putText(frame, "Bokhari - Lab08", (10, 30), font, 1, (255, 255, 255), 2)
+
+    # Add text to each isolated color frame
+    cv2.putText(red_only, "Bokhari - Lab08", (10, 30), font, 1, 255, 2)
+    cv2.putText(green_only, "Bokhari - Lab08", (10, 30), font, 1, 255, 2)
+    cv2.putText(blue_only, "Bokhari - Lab08", (10, 30), font, 1, 255, 2)
+
+    # Display the results
+    cv2.imshow('Original Frame', frame)
+    cv2.imshow('Red Only', red_only)
+    cv2.imshow('Green Only', green_only)
+    cv2.imshow('Blue Only', blue_only)
+
+    # Stop processing when ESC is pressed
+    k = cv2.waitKey(5)
+    if k == 27:  # ESC key
         break
 
-while(1):
-    _,frame = cap.read()
-
-    gray_image_2 = cv.cvtColor(frame,cv.COLOR_BGR2GRAY)
-    cv.imshow('background', gray_image_2)
-
-    difference = np.absolute(np.matrix(np.int16(gray_image)) - np.matrix(np.int16(gray_image_2)))
-    difference[difference > 255] = 255
-
-    difference = np.uint8(difference)
-
-    cv.imshow('difference', difference)
-
-    k = cv.waitKey(5)
-    if k == 27:
-        break
-
-#Center of object in X coordinate
-column_sums = np.matrix(np.sum(difference,0))
-column_numbers = np.matrix(np.arange(640))
-column_mult = np.multiply(column_sums, column_numbers)
-column_total = np.sum(column_mult)
-total_total = np.sum(np.sum(difference))
-difference_column_location = column_total/total_total
-
-print('Object column ("X") location: ', difference_column_location)
-
-#Center of object in Y coordinate
-row_sums = np.matrix(np.sum(difference,1))
-row_sums = row_sums.transpose()
-row_numbers = np.matrix(np.arange(480))
-row_mult = np.multiply(row_sums,row_numbers)
-row_total = np.sum(row_mult)
-difference_row_location = row_total/total_total
-
-print('Object column ("Y") location: ', difference_row_location)
-
-#Crosshairs
-color = (255,255,255)
-
-thickness = 1
-
-diff_x_location = np.uint16(difference_column_location)
-diff_y_location = np.uint16(difference_row_location)
-
-difference = cv.line(difference, (diff_x_location,0),(diff_x_location,480),color, thickness)
-difference = cv.line(difference, (0, diff_y_location),(640, diff_y_location),color, thickness)
-
-cv.imshow('difference',difference)
+# Destroy all windows when exiting
+cv2.destroyAllWindows()
