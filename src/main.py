@@ -4,10 +4,25 @@ import numpy as np
 # Initialize camera
 cap = cv2.VideoCapture(1)  # Change to the appropriate index if necessary
 
+# Define camera's field of view (21.6 mm x 16.5 mm)
+fov_width = 21.6  # mm
+fov_height = 16.5  # mm
+
+# Image resolution (640x480)
+image_width = 640  # pixels
+image_height = 480  # pixels
+
+# New camera-origin (344, 8) corresponds to (0 mm, -2 mm) in the real world
+camera_origin_x = 344
+camera_origin_y = 8
+real_origin_offset_y = 2  # Positive 2 mm (real-world y-offset)
+
+# Calculate scaling factors
+scaling_factor_x = fov_width / image_width  # mm/pixel
+scaling_factor_y = fov_height / image_height  # mm/pixel
+
 # Previous center to track the object's position
 previous_center = None
-
-# Threshold for movement sensitivity (distance between previous and current center)
 movement_threshold = 30
 
 # Variable to store the last detected center
@@ -34,82 +49,70 @@ while True:
     # Find contours of detected objects
     contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # List to store possible centers
     possible_centers = []
 
     for contour in contours:
-        # Approximate the contour to reduce the number of points
         epsilon = 0.04 * cv2.arcLength(contour, True)  # Adjust epsilon for accuracy
         approx = cv2.approxPolyDP(contour, epsilon, True)
 
         # Only consider hexagonal shapes (6 vertices)
         if len(approx) == 6:
-            # Draw the contour (hexagon)
             cv2.drawContours(frame, [approx], -1, (0, 255, 0), 2)
 
-            # Compute moments to get the center of the hexagon
             M = cv2.moments(contour)
             if M["m00"] != 0:
                 cx = int(M["m10"] / M["m00"])  # X-coordinate of the center
                 cy = int(M["m01"] / M["m00"])  # Y-coordinate of the center
-
-                # Add to list of possible centers
                 possible_centers.append((cx, cy))
 
     # If we have possible centers, apply motion filtering
     if possible_centers:
-        # Initialize the best center to track the stable object
         best_center = None
         min_distance = float('inf')
 
-        # Check the movement of each detected center and pick the most stable one
         for center in possible_centers:
-            # If previous center exists, calculate the movement
             if previous_center is not None:
                 distance = np.linalg.norm(np.array(center) - np.array(previous_center))
             else:
-                distance = 0  # For the first frame, there's no movement
+                distance = 0  # First frame, no movement
 
-            # Compare movement, the less the movement, the more stable it is
             if distance < min_distance and distance < movement_threshold:
                 best_center = center
                 min_distance = distance
 
-        # If a stable center is found, update and use it
         if best_center is not None:
             previous_center = best_center
             cx, cy = best_center
 
-            # Draw the center point
+            # Convert to real-world coordinates (mm) with the real-world y-origin offset
+            real_world_x = (cx - camera_origin_x) * scaling_factor_x
+            real_world_y = (cy - camera_origin_y) * scaling_factor_y + real_origin_offset_y  # Apply +2 mm offset for y
+
+            # Invert the sign of x-coordinate, but keep y positive
+            real_world_x = -real_world_x  # Flip the sign of x
+            # No inversion of y; it stays positive
+
+            # Display the real-world coordinates in mm
             cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
+            cv2.putText(frame, f"Center: ({real_world_x:.2f} mm, {real_world_y:.2f} mm)", 
+                        (cx + 10, cy - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
-            # Store the center value for further processing
-            last_detected_center = (cx, cy)
+            # Store the center value
+            last_detected_center = (real_world_x, real_world_y)
 
-            # Display the center text just above the center point, with small font
-            font_scale = 0.4  # Smaller font size
-            text = f"Center: ({cx}, {cy})"
-            text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)[0]
-            text_x = cx - text_size[0] // 2  # Center the text horizontally
-            text_y = cy - 10  # Place text above the dot
+            # Optionally, you can print or log these coordinates
+            print(f"Real-world center: ({real_world_x:.2f} mm, {real_world_y:.2f} mm)")
 
-            # Ensure text stays within frame boundaries
-            text_x = max(0, min(text_x, frame.shape[1] - text_size[0]))
-            text_y = max(0, min(text_y, frame.shape[0] - 10))
-
-            # Draw the text on the frame
-            cv2.putText(frame, text, (text_x, text_y),
-                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 0, 0), 1)
-
-    # Display the resulting frame
     cv2.imshow("Detected Hex Nut", frame)
 
-    # Break the loop on pressing 'Esc'
     if cv2.waitKey(1) & 0xFF == 27:  # Press 'Esc' to exit
         break
 
-# After the loop ends, print the last detected center
+# After loop ends, print the last detected center
 print("Last Detected Center:", last_detected_center)
 
 cap.release()
 cv2.destroyAllWindows()
+
+# Close the serial connection if it was used
+# ser.close()  # Commented out for now
