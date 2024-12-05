@@ -1,124 +1,115 @@
-import cv2 as cv
+import cv2
 import numpy as np
 
-cap = cv.VideoCapture(1)
+# Initialize camera
+cap = cv2.VideoCapture(1)  # Change to the appropriate index if necessary
 
-# Initialize tracker (Mean Shift or KLT)
-tracker = cv.TrackerMIL_create()
+# Previous center to track the object's position
+previous_center = None
 
-# Function to perform noise reduction and object detection
-def image_processing(frame):
-    global hsv_feed
-    hsv_feed = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+# Threshold for movement sensitivity (distance between previous and current center)
+movement_threshold = 30
 
-    # Define HSV range for grey color (silver/gray detection)
-    lower_grey = np.array([0, 0, 150])   # Low saturation, high brightness for grey
-    upper_grey = np.array([180, 50, 255])  # Upper threshold
-
-    # Create a mask based on HSV range
-    mask = cv.inRange(hsv_feed, lower_grey, upper_grey)
-    grey_filtered = cv.bitwise_and(frame, frame, mask=mask)
-
-    # Convert the filtered image to grayscale and apply Gaussian blur
-    grayscale_feed = cv.cvtColor(grey_filtered, cv.COLOR_BGR2GRAY)
-    blurred_feed = cv.GaussianBlur(grayscale_feed, (5, 5), 0)
-
-    # Detect edges using Canny edge detection
-    edges = cv.Canny(blurred_feed, 50, 150)
-    return edges, mask
-
-# Function to filter and process contours
-def detect_nut(frame, edges, mask):
-    contours, hierarchy = cv.findContours(edges, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-
-    # Iterate through the contours to detect objects
-    for contour, hier in zip(contours, hierarchy[0]):
-        # Skip small contours (noise)
-        if cv.contourArea(contour) < 200:  # Increase this threshold as needed
-            continue
-
-        # Approximate the contour to a polygon to check for a hexagon (6 sides)
-        epsilon = 0.04 * cv.arcLength(contour, True)
-        approx = cv.approxPolyDP(contour, epsilon, True)
-
-        if len(approx) == 6:  # Check if the contour is a hexagon
-            # Calculate the center of the hexagon using moments
-            M = cv.moments(contour)
-            if M["m00"] != 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
-
-                # Draw the center of the hexagon on the image
-                cv.circle(frame, (cx, cy), 5, (0, 0, 255), -1)  # Red center
-
-            # Draw the hexagon contour on the image
-            cv.drawContours(frame, [approx], 0, (0, 255, 0), 2)  # Green hexagon
-
-            # Return the bounding box for tracking
-            x, y, w, h = cv.boundingRect(contour)
-            return (x, y, w, h)  # Return bounding box
-
-    return None
-
-# Function to initialize tracking
-def init_tracking(frame):
-    ret, bbox = cv.selectROI("Select Nut", frame, fromCenter=False, showCrosshair=True)
-    if ret:
-        tracker.init(frame, bbox)
-    return bbox
+# Variable to store the last detected center
+last_detected_center = None
 
 while True:
     ret, frame = cap.read()
-
     if not ret:
-        print('Failed to capture camera.')
         break
 
-    if 'bbox' in locals():
-        # If the tracker is initialized, update it
-        success, bbox = tracker.update(frame)
-        if success:
-            x, y, w, h = [int(v) for v in bbox]
-            # Draw the tracked object rectangle
-            cv.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    # Convert to grayscale
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # Calculate the center of the object
-            center_x = int(x + w / 2)
-            center_y = int(y + h / 2)
+    # Apply Gaussian blur to reduce noise
+    blurred_frame = cv2.GaussianBlur(gray_frame, (5, 5), 0)
 
-            # Draw the center point on the image
-            cv.circle(frame, (center_x, center_y), 5, (0, 0, 255), -1)  # Red center point
+    # Thresholding: dark objects (nut) will have low intensity values
+    _, binary = cv2.threshold(blurred_frame, 100, 255, cv2.THRESH_BINARY_INV)
 
-            # Optionally, display the coordinates of the center
-            cv.putText(frame, f'Center: ({center_x}, {center_y})', (center_x + 10, center_y - 10),
-                       cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+    # Morphological operations to remove noise
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
 
-        # Smooth the object's position with exponential smoothing
-        if success:
-            smoothed_x = int(center_x * 0.7 + previous_x * 0.3)
-            smoothed_y = int(center_y * 0.7 + previous_y * 0.3)
-            previous_x, previous_y = smoothed_x, smoothed_y
-            cv.circle(frame, (smoothed_x, smoothed_y), 5, (0, 0, 255), -1)
-        
-    else:
-        # If tracking hasn't been initialized, find the nut and start tracking
-        edges, mask = image_processing(frame)
-        bbox = detect_nut(frame, edges, mask)
-        
-        if bbox is not None:
-            # Start tracking after the first detection
-            tracker.init(frame, bbox)
-            previous_x, previous_y = bbox[0] + bbox[2] // 2, bbox[1] + bbox[3] // 2
+    # Find contours of detected objects
+    contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Display the frames
-    cv.imshow('HSV Feed', hsv_feed)
-    cv.imshow('Bokhari - Camera (Original)', frame)
-    cv.imshow('Bokhari - Edge Detection', edges)
+    # List to store possible centers
+    possible_centers = []
 
-    # Exit on pressing 'ESC'
-    k = cv.waitKey(1)
-    if k == 27:
+    for contour in contours:
+        # Approximate the contour to reduce the number of points
+        epsilon = 0.04 * cv2.arcLength(contour, True)  # Adjust epsilon for accuracy
+        approx = cv2.approxPolyDP(contour, epsilon, True)
+
+        # Only consider hexagonal shapes (6 vertices)
+        if len(approx) == 6:
+            # Draw the contour (hexagon)
+            cv2.drawContours(frame, [approx], -1, (0, 255, 0), 2)
+
+            # Compute moments to get the center of the hexagon
+            M = cv2.moments(contour)
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])  # X-coordinate of the center
+                cy = int(M["m01"] / M["m00"])  # Y-coordinate of the center
+
+                # Add to list of possible centers
+                possible_centers.append((cx, cy))
+
+    # If we have possible centers, apply motion filtering
+    if possible_centers:
+        # Initialize the best center to track the stable object
+        best_center = None
+        min_distance = float('inf')
+
+        # Check the movement of each detected center and pick the most stable one
+        for center in possible_centers:
+            # If previous center exists, calculate the movement
+            if previous_center is not None:
+                distance = np.linalg.norm(np.array(center) - np.array(previous_center))
+            else:
+                distance = 0  # For the first frame, there's no movement
+
+            # Compare movement, the less the movement, the more stable it is
+            if distance < min_distance and distance < movement_threshold:
+                best_center = center
+                min_distance = distance
+
+        # If a stable center is found, update and use it
+        if best_center is not None:
+            previous_center = best_center
+            cx, cy = best_center
+
+            # Draw the center point
+            cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
+
+            # Store the center value for further processing
+            last_detected_center = (cx, cy)
+
+            # Display the center text just above the center point, with small font
+            font_scale = 0.4  # Smaller font size
+            text = f"Center: ({cx}, {cy})"
+            text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, 1)[0]
+            text_x = cx - text_size[0] // 2  # Center the text horizontally
+            text_y = cy - 10  # Place text above the dot
+
+            # Ensure text stays within frame boundaries
+            text_x = max(0, min(text_x, frame.shape[1] - text_size[0]))
+            text_y = max(0, min(text_y, frame.shape[0] - 10))
+
+            # Draw the text on the frame
+            cv2.putText(frame, text, (text_x, text_y),
+                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 0, 0), 1)
+
+    # Display the resulting frame
+    cv2.imshow("Detected Hex Nut", frame)
+
+    # Break the loop on pressing 'Esc'
+    if cv2.waitKey(1) & 0xFF == 27:  # Press 'Esc' to exit
         break
+
+# After the loop ends, print the last detected center
+print("Last Detected Center:", last_detected_center)
 
 cap.release()
-cv.destroyAllWindows()
+cv2.destroyAllWindows()
