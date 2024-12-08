@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import math
 
 # Initialize camera
 cap = cv2.VideoCapture(1)  # Change to the appropriate index if necessary
@@ -13,8 +14,8 @@ image_width = 640  # pixels
 image_height = 480  # pixels
 
 # New camera-origin (344, 8) corresponds to (0 mm, -2 mm) in the real world
-camera_origin_x = 344
-camera_origin_y = 8
+camera_origin_x = 341
+camera_origin_y = 13
 real_origin_offset_y = 2  # Positive 2 mm (real-world y-offset)
 
 # Calculate scaling factors
@@ -113,6 +114,52 @@ print("Last Detected Center:", last_detected_center)
 
 cap.release()
 cv2.destroyAllWindows()
+
+def inverse_kinematics_2d(x, y, L1=6.2, L2=3.8):
+    """
+    Calculate the angles for a 2-DOF manipulator arm in a 2D plane.
+    
+    Args:
+        x (float): Target x-coordinate in cm.
+        y (float): Target y-coordinate in cm.
+        L1 (float): Length of the first link in cm. Default is 6.2 cm.
+        L2 (float): Length of the second link in cm. Default is 3.8 cm.
+    
+    Returns:
+        tuple: Angles (theta1, theta2) in degrees.
+    """
+    # Check if the target is reachable
+    distance = math.sqrt(x**2 + y**2)
+    if distance > (L1 + L2):
+        raise ValueError("Target is out of reach.")
+
+    # Calculate theta2 (elbow angle)
+    cos_theta2 = (x**2 + y**2 - L1**2 - L2**2) / (2 * L1 * L2)
+    sin_theta2 = math.sqrt(1 - cos_theta2**2)  # Positive root
+    theta2 = math.atan2(sin_theta2, cos_theta2)
+
+    # Calculate theta1 (base angle)
+    k1 = L1 + L2 * cos_theta2
+    k2 = L2 * sin_theta2
+    theta1 = math.atan2(y, x) - math.atan2(k2, k1)
+
+    # Convert radians to degrees
+    theta1_deg = math.degrees(theta1)
+    theta2_deg = math.degrees(theta2)
+
+    return theta1_deg, theta2_deg
+
+coordinates = inverse_kinematics_2d(real_world_x, real_world_y, 6.2, 3.8)
+
+Theta_1 = coordinates[0]
+Theta_2 = coordinates[1]
+
+print(Theta_1)
+print(Theta_2)
+
+
+# Close the serial connection if it was used
+# ser.close()  # Commented out for now
 
 # Close the serial connection if it was used
 # ser.close()  # Commented out for now
