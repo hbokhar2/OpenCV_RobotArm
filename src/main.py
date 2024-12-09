@@ -20,8 +20,8 @@ image_width = 640  # pixels
 image_height = 480  # pixels
 
 # New camera-origin (344, 8) corresponds to (0 mm, -2 mm) in the real world
-camera_origin_x = 419
-camera_origin_y = 7
+camera_origin_x = 409
+camera_origin_y = 4
 
 real_origin_offset_y = 2  # Positive 2 mm (real-world y-offset)
 
@@ -162,7 +162,7 @@ def inverse_kinematics_2d(x, y, L1=6.2, L2=3.8):
 
     return theta1_deg, theta2_deg
 
-coordinates = inverse_kinematics_2d(real_world_x, real_world_y, 6.2, 3.8)
+coordinates = inverse_kinematics_2d(real_world_x, real_world_y, 6.2, 6.2)
 
 ser = serial.Serial()
 ser.baudrate = 9600
