@@ -20,9 +20,9 @@ image_width = 640  # pixels
 image_height = 480  # pixels
 
 # New camera-origin (344, 8) corresponds to (0 mm, -2 mm) in the real world
-camera_origin_x = 401
+camera_origin_x = 419
+camera_origin_y = 7
 
-camera_origin_y = 4
 real_origin_offset_y = 2  # Positive 2 mm (real-world y-offset)
 
 # Calculate scaling factors
