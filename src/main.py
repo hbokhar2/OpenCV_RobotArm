@@ -1,9 +1,15 @@
 import cv2
 import numpy as np
 import math
+import serial
+import struct
+import time
 
 # Initialize camera
-cap = cv2.VideoCapture(1)  # Change to the appropriate index if necessary
+cap = cv2.VideoCapture(1)
+if not cap.isOpened():
+    print("Error: Could not open camera.")
+    exit()
 
 # Define camera's field of view (21.6 mm x 16.5 mm)
 fov_width = 21.6  # mm
@@ -14,8 +20,9 @@ image_width = 640  # pixels
 image_height = 480  # pixels
 
 # New camera-origin (344, 8) corresponds to (0 mm, -2 mm) in the real world
-camera_origin_x = 341
-camera_origin_y = 13
+camera_origin_x = 401
+
+camera_origin_y = 4
 real_origin_offset_y = 2  # Positive 2 mm (real-world y-offset)
 
 # Calculate scaling factors
@@ -117,7 +124,7 @@ cv2.destroyAllWindows()
 
 def inverse_kinematics_2d(x, y, L1=6.2, L2=3.8):
     """
-    Calculate the angles for a 2-DOF manipulator arm in a 2D plane.
+    Calculate the joint angles for a 2-DOF manipulator arm in a 2D plane.
     
     Args:
         x (float): Target x-coordinate in cm.
@@ -128,22 +135,28 @@ def inverse_kinematics_2d(x, y, L1=6.2, L2=3.8):
     Returns:
         tuple: Angles (theta1, theta2) in degrees.
     """
-    # Check if the target is reachable
+    # Calculate the distance from the origin to the target point
     distance = math.sqrt(x**2 + y**2)
+    
+    # Check if the target is within reach
     if distance > (L1 + L2):
         raise ValueError("Target is out of reach.")
-
-    # Calculate theta2 (elbow angle)
+    
+    # Calculate theta2 (elbow angle) using the law of cosines
     cos_theta2 = (x**2 + y**2 - L1**2 - L2**2) / (2 * L1 * L2)
-    sin_theta2 = math.sqrt(1 - cos_theta2**2)  # Positive root
-    theta2 = math.atan2(sin_theta2, cos_theta2)
+    
+    # Ensure that cos_theta2 is within the valid range to avoid math domain errors
+    cos_theta2 = max(-1, min(1, cos_theta2))
+    
+    # Elbow angle (theta2) using atan2 for correct angle handling
+    theta2 = math.atan2(math.sqrt(1 - cos_theta2**2), cos_theta2)
 
     # Calculate theta1 (base angle)
     k1 = L1 + L2 * cos_theta2
-    k2 = L2 * sin_theta2
+    k2 = L2 * math.sqrt(1 - cos_theta2**2)
     theta1 = math.atan2(y, x) - math.atan2(k2, k1)
 
-    # Convert radians to degrees
+    # Convert the angles from radians to degrees
     theta1_deg = math.degrees(theta1)
     theta2_deg = math.degrees(theta2)
 
@@ -151,15 +164,63 @@ def inverse_kinematics_2d(x, y, L1=6.2, L2=3.8):
 
 coordinates = inverse_kinematics_2d(real_world_x, real_world_y, 6.2, 3.8)
 
-Theta_1 = coordinates[0]
-Theta_2 = coordinates[1]
+ser = serial.Serial()
+ser.baudrate = 9600
+ser.port = 'COM7'
 
-print(Theta_1)
-print(Theta_2)
+time.sleep(4)
 
+decimal_number1 = coordinates[0]
+Rounded = round(decimal_number1, 3)
+whole_Num = int(Rounded)
+decimal_part = Rounded - whole_Num
 
-# Close the serial connection if it was used
-# ser.close()  # Commented out for now
+place_number = 100
+decimal_part = decimal_part * place_number
 
-# Close the serial connection if it was used
-# ser.close()  # Commented out for now
+decimal_part = math.trunc(decimal_part)
+
+whole_Num1 = np.uint8(whole_Num)
+decimal_part1 = np.uint8(decimal_part)
+
+ser.open()
+ser.write(bytearray([whole_Num1]))
+ser.close()
+
+time.sleep(3)
+ser.open()
+ser.write(bytearray([decimal_part1]))
+ser.close()
+
+time.sleep(2)
+
+negative_number = coordinates[1]
+offset_number = 100
+number2 = negative_number + offset_number
+
+time.sleep(4)
+
+decimal_number2 = number2
+Rounded = round(decimal_number2, 2)
+whole_Num = int(Rounded)
+decimal_part = Rounded - whole_Num
+
+place_number = 100
+decimal_part = decimal_part * place_number
+
+decimal_part = math.trunc(decimal_part)
+
+whole_Num1 = np.uint8(whole_Num)
+decimal_part1 = np.uint8(decimal_part)
+
+ser.open()
+ser.write(bytearray([whole_Num1]))
+ser.close()
+
+time.sleep(3)
+ser.open()
+ser.write(bytearray([decimal_part1]))
+ser.close()
+
+print(decimal_number1)
+print(decimal_number2)
